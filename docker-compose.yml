@@ -1,0 +1,18 @@
+services:
+  php:
+    build: .
+    container_name: php_webhook
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx_webhook
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/var/www/html
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - php

@@ -1,0 +1,110 @@
+{
+  "id": 1,
+  "answers": {
+    "Answer1": {
+      "correctAnswer": 196.67,
+      "limit": 0.01,
+      "type": "numeric",
+      "description": "Точное числовое значение с погрешностью 0.01"
+    },
+    "Answer2": {
+      "correctAnswer": 26,
+      "limit": 0,
+      "type": "exact",
+      "description": "Точное целое число"
+    },
+    "Answer3": {
+      "correctAnswer": "<224",
+      "limit": 2,
+      "type": "comparison",
+      "operator": "<",
+      "value": 224,
+      "description": "Значение должно быть меньше 224"
+    },
+    "Answer4": {
+      "min": 7500,
+      "max": 7600,
+      "type": "range",
+      "description": "Значение должно быть в диапазоне от 7500 до 7600"
+    },
+    "Answer5": {
+      "correctAnswer": "Answer3 + 26",
+      "limit": 2,
+      "type": "dependent",
+      "dependsOn": "Answer3",
+      "operation": "add",
+      "value": 26,
+      "description": "Значение должно быть на 26 больше, чем Answer3"
+    },
+    "Answer6": {
+      "correctAnswer": 69.28,
+      "limit": 0.01,
+      "type": "numeric",
+      "description": "Точное числовое значение с погрешностью 0.01"
+    },
+    "Answer7": {
+      "correctAnswer": 26,
+      "limit": 0,
+      "type": "exact",
+      "description": "Точное целое число"
+    },
+    "Answer8": {
+      "correctAnswer": "<224",
+      "limit": 2,
+      "type": "comparison",
+      "operator": "<",
+      "value": 224,
+      "description": "Значение должно быть меньше 224"
+    },
+    "Answer9": {
+      "min": 2600,
+      "max": 2700,
+      "type": "range",
+      "description": "Значение должно быть в диапазоне от 7500 до 7600"
+    },
+    "Answer10": {
+      "correctAnswer": "Answer8 + 26",
+      "limit": 2,
+      "type": "dependent",
+      "dependsOn": "Answer8",
+      "operation": "add",
+      "value": 26,
+      "description": "Значение должно быть на 26 больше, чем Answer3"
+    },
+    "Answer11": {
+      "correctAnswer": 65.99,
+      "limit": 0.01,
+      "type": "numeric",
+      "description": "Точное числовое значение с погрешностью 0.01"
+    },
+    "Answer12": {
+      "correctAnswer": 56,
+      "limit": 0,
+      "type": "exact",
+      "description": "Точное целое число"
+    },
+    "Answer13": {
+      "correctAnswer": "<194",
+      "limit": 2,
+      "type": "comparison",
+      "operator": "<",
+      "value": 194,
+      "description": "Значение должно быть меньше 194"
+    },
+    "Answer14": {
+      "min": 1100,
+      "max": 1300,
+      "type": "range",
+      "description": "Значение должно быть в диапазоне от 7500 до 7600"
+    },
+    "Answer15": {
+      "correctAnswer": "Answer13 + 56",
+      "limit": 2,
+      "type": "dependent",
+      "dependsOn": "Answer13",
+      "operation": "add",
+      "value": 56,
+      "description": "Значение должно быть на 56 больше, чем Answer3"
+    }
+  }
+}
