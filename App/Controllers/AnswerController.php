@@ -142,10 +142,72 @@ class AnswerController
             }
         }
 
+        // Получаем ID лабораторной работы из answers.json
+        $labId = $this->answers['id'];
+        $tableName = 'lab_' . $labId;
+
+        // Создаем таблицу, если она не существует
+        $this->createLabTable($tableName);
+
+        // Записываем ответы ученика в таблицу
+        $this->saveStudentAnswers($tableName, $userAnswers);
+
         return [
             'correct' => $correctCount,
             'total' => $totalAnswers,
             'percentage' => $totalAnswers > 0 ? round(($correctCount / $totalAnswers) * 100) : 0
         ];
+    }
+
+    private function createLabTable($tableName)
+    {
+        $db = new \SQLite3('App/database/database.sqlite');
+        $columns = [];
+        foreach ($this->answers['answers'] as $answerKey => $answerConfig) {
+            $columns[] = "$answerKey TEXT";
+        }
+        $columnsStr = implode(', ', $columns);
+        $query = "CREATE TABLE IF NOT EXISTS $tableName (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id TEXT,
+            $columnsStr,
+            total_questions INTEGER,
+            correct_answers INTEGER,
+            percentage REAL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )";
+        $db->exec($query);
+        $db->close();
+    }
+
+    private function saveStudentAnswers($tableName, $userAnswers)
+    {
+        $db = new \SQLite3('App/database/database.sqlite');
+        $studentId = $_POST['id'] ?? 'unknown';
+        $columns = [];
+        $values = [];
+        foreach ($this->answers['answers'] as $answerKey => $answerConfig) {
+            $columns[] = $answerKey;
+            $value = isset($userAnswers[$answerKey]) ? $userAnswers[$answerKey] : '';
+            $value = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $value);
+            $values[] = "'$value'";
+        }
+        $columnsStr = implode(', ', $columns);
+        $valuesStr = implode(', ', $values);
+
+        // Подсчет общего количества вопросов и правильных ответов
+        $totalQuestions = count($this->answers['answers']);
+        $correctAnswers = 0;
+        foreach ($this->answers['answers'] as $answerKey => $answerConfig) {
+            if (isset($userAnswers[$answerKey]) && $this->validateAnswer($answerKey, $userAnswers[$answerKey])) {
+                $correctAnswers++;
+            }
+        }
+        $percentage = $totalQuestions > 0 ? round(($correctAnswers / $totalQuestions) * 100, 2) : 0;
+
+        $query = "INSERT INTO $tableName (student_id, $columnsStr, total_questions, correct_answers, percentage) 
+                  VALUES ('$studentId', $valuesStr, $totalQuestions, $correctAnswers, $percentage)";
+        $db->exec($query);
+        $db->close();
     }
 }
