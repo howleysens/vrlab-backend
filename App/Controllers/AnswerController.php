@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Controllers;
 
 class AnswerController
@@ -19,10 +20,24 @@ class AnswerController
         }
     }
 
+    private function getCurrentLab($labId)
+    {
+        if (!is_array($this->answers)) {
+            return null;
+        }
+
+        foreach ($this->answers as $lab) {
+            if ($lab['id'] == $labId) {
+                return $lab;
+            }
+        }
+        return null;
+    }
+
     private function normalizeNumber($value)
     {
         $value = trim($value);
-        
+
         if (empty($value)) {
             return null;
         }
@@ -30,21 +45,22 @@ class AnswerController
         $value = str_replace(',', '.', $value);
         $value = str_replace(' ', '', $value);
         $value = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $value);
-        
+
         if (!is_numeric($value)) {
             return null;
         }
 
-        return (float) $value;
+        return (float)$value;
     }
 
-    private function validateAnswer($answerKey, $userAnswer)
+    private function validateAnswer($answerKey, $userAnswer, $labId)
     {
-        if (!isset($this->answers['answers'][$answerKey])) {
+        $currentLab = $this->getCurrentLab($labId);
+        if (!$currentLab || !isset($currentLab['answers'][$answerKey])) {
             return false;
         }
 
-        $answerConfig = $this->answers['answers'][$answerKey];
+        $answerConfig = $currentLab['answers'][$answerKey];
         $userValue = $this->normalizeNumber($userAnswer);
 
         if ($userValue === null) {
@@ -56,6 +72,19 @@ class AnswerController
                 $diff = abs($userValue - $answerConfig['correctAnswer']);
                 $diff = round($diff, 5);
                 return $diff <= $answerConfig['limit'];
+            
+            case 'multiple_numeric':
+                if (!isset($answerConfig['correctAnswers']) || !is_array($answerConfig['correctAnswers'])) {
+                    return false;
+                }
+                foreach ($answerConfig['correctAnswers'] as $correctAnswer) {
+                    $diff = abs($userValue - $correctAnswer['value']);
+                    $diff = round($diff, 5);
+                    if ($diff <= $correctAnswer['limit']) {
+                        return true;
+                    }
+                }
+                return false;
             
             case 'exact':
                 return $userValue == $answerConfig['correctAnswer'];
@@ -127,66 +156,86 @@ class AnswerController
             ];
         }
 
-        $userAnswers = array_filter($_POST, function($value, $key) {
+        // Поддержка как lab_id, так и labNumber
+        $labId = $_POST['lab_id'] ?? $_POST['labNumber'] ?? 1;
+        $currentLab = $this->getCurrentLab($labId);
+
+        if (!$currentLab) {
+            return [
+                'error' => 'Laboratory work not found',
+                'correct' => 0,
+                'total' => 0,
+                'percentage' => 0
+            ];
+        }
+
+        $userAnswers = array_filter($_POST, function ($value, $key) {
             return strpos($key, 'Answer') === 0 && $value !== '';
         }, ARRAY_FILTER_USE_BOTH);
 
-        $totalAnswers = count($this->answers['answers']);
+        $totalAnswers = count($currentLab['answers']);
         $correctCount = 0;
-        
-        foreach ($this->answers['answers'] as $answerKey => $answerConfig) {
+
+        foreach ($currentLab['answers'] as $answerKey => $answerConfig) {
             if (isset($userAnswers[$answerKey])) {
-                if ($this->validateAnswer($answerKey, $userAnswers[$answerKey])) {
+                if ($this->validateAnswer($answerKey, $userAnswers[$answerKey], $labId)) {
                     $correctCount++;
                 }
             }
         }
 
-        // Получаем ID лабораторной работы из answers.json
-        $labId = $this->answers['id'];
         $tableName = 'lab_' . $labId;
 
-        // Создаем таблицу, если она не существует
-        $this->createLabTable($tableName);
+        try {
+            // Создаем таблицу, если она не существует
+            $this->createLabTable($tableName, $currentLab);
 
-        // Записываем ответы ученика в таблицу
-        $this->saveStudentAnswers($tableName, $userAnswers);
+            // Записываем ответы ученика в таблицу
+            $this->saveStudentAnswers($tableName, $userAnswers, $currentLab);
+        } catch (\Exception $e) {
+            // Логируем ошибку, но продолжаем выполнение
+            error_log("Error creating/saving lab data: " . $e->getMessage());
+        }
 
         return [
             'correct' => $correctCount,
             'total' => $totalAnswers,
-            'percentage' => $totalAnswers > 0 ? round(($correctCount / $totalAnswers) * 100) : 0
-        ];
+            'percentage' => $totalAnswers > 0 ? round(($correctCount / $totalAnswers) * 100) : 0];
     }
 
-    private function createLabTable($tableName)
+    private function createLabTable($tableName, $currentLab)
     {
-        $db = new \SQLite3('App/database/database.sqlite');
-        $columns = [];
-        foreach ($this->answers['answers'] as $answerKey => $answerConfig) {
-            $columns[] = "$answerKey TEXT";
+        try {
+            $db = new \SQLite3('App/database/database.sqlite');
+            $columns = [];
+            foreach ($currentLab['answers'] as $answerKey => $answerConfig) {
+                $columns[] = "$answerKey TEXT";
+            }
+            $columnsStr = implode(', ', $columns);
+            $query = "CREATE TABLE IF NOT EXISTS $tableName (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT,
+                $columnsStr,
+                total_questions INTEGER,
+                correct_answers INTEGER,
+                percentage REAL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )";
+            $db->exec($query);
+            $db->close();
+        } catch (\Exception $e) {
+            error_log("Error creating table $tableName: " . $e->getMessage());
+            throw $e;
         }
-        $columnsStr = implode(', ', $columns);
-        $query = "CREATE TABLE IF NOT EXISTS $tableName (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id TEXT,
-            $columnsStr,
-            total_questions INTEGER,
-            correct_answers INTEGER,
-            percentage REAL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )";
-        $db->exec($query);
-        $db->close();
     }
 
-    private function saveStudentAnswers($tableName, $userAnswers)
+    private function saveStudentAnswers($tableName, $userAnswers, $currentLab)
     {
         $db = new \SQLite3('App/database/database.sqlite');
         $studentId = $_POST['id'] ?? 'unknown';
         $columns = [];
         $values = [];
-        foreach ($this->answers['answers'] as $answerKey => $answerConfig) {
+        foreach ($currentLab['answers'] as $answerKey => $answerConfig) {
             $columns[] = $answerKey;
             $value = isset($userAnswers[$answerKey]) ? $userAnswers[$answerKey] : '';
             $value = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $value);
@@ -196,10 +245,10 @@ class AnswerController
         $valuesStr = implode(', ', $values);
 
         // Подсчет общего количества вопросов и правильных ответов
-        $totalQuestions = count($this->answers['answers']);
+        $totalQuestions = count($currentLab['answers']);
         $correctAnswers = 0;
-        foreach ($this->answers['answers'] as $answerKey => $answerConfig) {
-            if (isset($userAnswers[$answerKey]) && $this->validateAnswer($answerKey, $userAnswers[$answerKey])) {
+        foreach ($currentLab['answers'] as $answerKey => $answerConfig) {
+            if (isset($userAnswers[$answerKey]) && $this->validateAnswer($answerKey, $userAnswers[$answerKey], $currentLab['id'])) {
                 $correctAnswers++;
             }
         }
