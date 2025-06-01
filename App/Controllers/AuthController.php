@@ -22,6 +22,8 @@ class AuthController
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 login TEXT UNIQUE NOT NULL,
                 password TEXT NOT NULL,
+                name TEXT NOT NULL,
+                age INTEGER NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ');
@@ -57,10 +59,18 @@ class AuthController
                 ]);
                 return;
             }
+            $avgMark = $this->getAvgMark($user['id']);
 
             $this->jsonResponse([
                 'success' => true,
                 'message' => 'Успешная аутентификация',
+                'students' => [
+                    'id' => $user['id'],
+                    'login' => $user['login'],
+                    'password' => $user['password'],
+                    'name' => $user['name'],
+                    'age' => $user['age']
+                ],
                 'error' => [
                     'isError' => false,
                     'errorText' => 'Success'
@@ -76,6 +86,11 @@ class AuthController
                 ]
             ], 500);
         }
+    }
+
+    private function getAvgMark($userId): string
+    {
+        return '';
     }
 
     private function jsonResponse(array $data, int $statusCode = 200): void

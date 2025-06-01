@@ -4,8 +4,7 @@ namespace App;
 
 use App\Controllers\AnswerController;
 use App\Controllers\AuthController;
-use GuzzleHttp\Psr7\Request;
-use GuzzleHttp\Psr7\Response;
+use App\Controllers\StatisticsController;
 
 class Application
 {
@@ -25,6 +24,10 @@ class Application
             case 'setAnswer':
                 $answerController = new AnswerController();
                 $response = $answerController->validateAnswers($_REQUEST);
+                break;
+            case 'getUserStatistic':
+                $statisticController = new StatisticsController($_REQUEST['id']);
+                $response = $statisticController->getUserStatistic();
                 break;
             default:
                 $response = [
