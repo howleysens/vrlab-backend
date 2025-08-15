@@ -29,7 +29,7 @@ class AuthController
         ');
     }
 
-    public function auth(string $login, string $password): void
+    public function auth(string $login, string $password): string
     {
         try {
             $stmt = $this->db->prepare('SELECT * FROM users WHERE login = :login');
@@ -45,7 +45,6 @@ class AuthController
                         'errorText' => 'User'
                     ]
                 ]);
-                return;
             }
 
             if (!($password === $user['password'])) {
@@ -57,7 +56,6 @@ class AuthController
                         'errorText' => 'Password'
                     ]
                 ]);
-                return;
             }
             $avgMark = $this->getAvgMark($user['id']);
 
