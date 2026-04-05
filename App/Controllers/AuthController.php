@@ -2,6 +2,7 @@
 namespace App\Controllers;
 
 use App\Facades\Database;
+use App\Services\StudentLabsService;
 use PDO;
 use Exception;
 
@@ -27,6 +28,32 @@ class AuthController
 				created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 			)
 		');
+
+		$this->ensureRoleColumn();
+	}
+
+	private function ensureRoleColumn(): void
+	{
+		$columns = $this->db->query("PRAGMA table_info(users)")->fetchAll(PDO::FETCH_ASSOC);
+		$hasRoleColumn = false;
+
+		foreach ($columns as $column) {
+			if (($column['name'] ?? '') === 'role') {
+				$hasRoleColumn = true;
+				break;
+			}
+		}
+
+		if (!$hasRoleColumn) {
+			$this->db->exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'student'");
+		}
+
+		$this->db->exec("UPDATE users SET role = 'student' WHERE role IS NULL OR role NOT IN ('student', 'teacher')");
+	}
+
+	private function normalizeRole(?string $role): string
+	{
+		return in_array($role, ['student', 'teacher'], true) ? $role : 'student';
 	}
 
 	public function auth(string $login, string $password): string
@@ -70,6 +97,7 @@ class AuthController
 					'password' => $user['password'],
 					'name' => $user['name'],
 					'age' => $user['age'],
+					'role' => $this->normalizeRole($user['role'] ?? null),
 					'avgMark' => $overallAvg,
 					'labs' => $labs,
 				],
@@ -105,59 +133,7 @@ class AuthController
 	 */
 	private function getLabsSummary(int $userId): array
 	{
-		$totalPercentage = 0.0;
-		$countLabsWithResults = 0;
-		$labs = [];
-
-		// Получаем список таблиц lab_*
-		$tablesStmt = $this->db->query("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'lab_%'");
-		$tables = $tablesStmt ? $tablesStmt->fetchAll(PDO::FETCH_COLUMN) : [];
-
-		// Читаем конфигурацию лабораторных для названий
-		$labNames = [];
-		$configPath = __DIR__ . '/../config/answers.json';
-		if (file_exists($configPath)) {
-			$config = json_decode(file_get_contents($configPath), true);
-			if (is_array($config)) {
-				foreach ($config as $labCfg) {
-					$labIdCfg = $labCfg['id'] ?? null;
-					if ($labIdCfg !== null) {
-						$name = $labCfg['name'] ?? ('Lab ' . $labIdCfg);
-						$labNames[(int)$labIdCfg] = $name;
-					}
-				}
-			}
-		}
-
-		foreach ($tables as $tableName) {
-			if (strpos($tableName, 'lab_') !== 0) {
-				continue;
-			}
-			$labId = (int)substr($tableName, 4);
-
-			$lastStmt = $this->db->prepare("SELECT percentage, total_questions, correct_answers, timestamp FROM {$tableName} WHERE student_id = :sid ORDER BY timestamp DESC LIMIT 1");
-			$lastStmt->execute([':sid' => (string)$userId]);
-			$row = $lastStmt->fetch(PDO::FETCH_ASSOC);
-			if (!$row) {
-				continue;
-			}
-
-			$percentage = (float)$row['percentage'];
-			$totalPercentage += $percentage;
-			$countLabsWithResults++;
-
-			$labs[] = [
-				'labId' => $labId,
-				'name' => $labNames[$labId] ?? ('Lab ' . $labId),
-				'averageMark' => $percentage,
-				'correctAnswers' => (int)$row['correct_answers'],
-				'totalQuestions' => (int)$row['total_questions'],
-				'timestamp' => $row['timestamp'],
-			];
-		}
-
-		$overallAvg = $countLabsWithResults > 0 ? round($totalPercentage / $countLabsWithResults, 2) : 0.0;
-		return [$overallAvg, $labs];
+		return (new StudentLabsService($this->db))->getLabsSummary($userId);
 	}
 
 	private function jsonResponse(array $data, int $statusCode = 200): void
