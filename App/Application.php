@@ -4,6 +4,7 @@ namespace App;
 
 use App\Controllers\AnswerController;
 use App\Controllers\AuthController;
+use App\Controllers\ClassController;
 use App\Controllers\ProgressController;
 use App\Controllers\StatisticsController;
 
@@ -33,6 +34,15 @@ class Application
             case 'getProgress':
                 $progressController = new ProgressController($_REQUEST['id']);
                 $response = $progressController->getStudentProgress();
+                break;
+            case 'getClasses':
+                $classController = new ClassController();
+                $teacherId = isset($request['teacher_id']) ? (int)$request['teacher_id'] : null;
+                $classController->getClasses($teacherId);
+                break;
+            case 'getClassStudents':
+                $classController = new ClassController();
+                $classController->getClassStudents((int)($request['class_id'] ?? 0));
                 break;
             default:
                 $response = [
