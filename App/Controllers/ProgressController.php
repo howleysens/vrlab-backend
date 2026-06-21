@@ -12,9 +12,6 @@ class ProgressController
     {
     }
 
-    /**
-     * @return string
-     */
     private function getStudentId(): string
     {
         return $this->studentId;

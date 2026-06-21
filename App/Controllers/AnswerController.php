@@ -156,7 +156,6 @@ class AnswerController
             ];
         }
 
-        // Поддержка как lab_id, так и labNumber
         $labId = $_POST['lab_id'] ?? $_POST['labNumber'] ?? 1;
         $currentLab = $this->getCurrentLab($labId);
 
@@ -187,13 +186,9 @@ class AnswerController
         $tableName = 'lab_' . $labId;
 
         try {
-            // Создаем таблицу, если она не существует
             $this->createLabTable($tableName, $currentLab);
-
-            // Записываем ответы ученика в таблицу
             $this->saveStudentAnswers($tableName, $userAnswers, $currentLab);
         } catch (\Exception $e) {
-            // Логируем ошибку, но продолжаем выполнение
             error_log("Error creating/saving lab data: " . $e->getMessage());
         }
 
@@ -244,7 +239,6 @@ class AnswerController
         $columnsStr = implode(', ', $columns);
         $valuesStr = implode(', ', $values);
 
-        // Подсчет общего количества вопросов и правильных ответов
         $totalQuestions = count($currentLab['answers']);
         $correctAnswers = 0;
         foreach ($currentLab['answers'] as $answerKey => $answerConfig) {

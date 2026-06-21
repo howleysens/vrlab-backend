@@ -85,7 +85,6 @@ class AuthController
 				]);
 			}
 
-			// Собираем список лабораторных работ и общий средний балл
 			[$overallAvg, $labs] = $this->getLabsSummary((int)$user['id']);
 
 			$this->jsonResponse([
@@ -128,9 +127,6 @@ class AuthController
 		}
 	}
 
-	/**
-	 * Возвращает [общая_средняя_оценка, список_лабораторных]
-	 */
 	private function getLabsSummary(int $userId): array
 	{
 		return (new StudentLabsService($this->db))->getLabsSummary($userId);
