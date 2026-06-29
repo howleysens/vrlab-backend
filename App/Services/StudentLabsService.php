@@ -35,7 +35,7 @@ class StudentLabsService
 				continue;
 			}
 
-			$labAvgMark = round((float)($row['percentage'] ?? 0), 2);
+			$labAvgMark = $this->resolveLabScore($row, $labId);
 			$totalLabAvgMark += $labAvgMark;
 			$countLabsWithResults++;
 
@@ -119,6 +119,47 @@ class StudentLabsService
 		}
 
 		return $this->isAnswerCorrect($answerConfig, (string)$userAnswer, $row) ? 100 : 0;
+	}
+
+	private function resolveLabScore(array $row, int $labId): float
+	{
+		if (isset($row['score']) && is_numeric($row['score'])) {
+			return (float)$row['score'];
+		}
+
+		$totalQuestions = (int)($row['total_questions'] ?? 0);
+		$correctAnswers = (int)($row['correct_answers'] ?? 0);
+		$gradingConfig = $this->labConfigs[$labId]['grading'] ?? [];
+		$maxScore = (int)($gradingConfig['maxScore'] ?? 3);
+
+		if ($totalQuestions <= 0 || $correctAnswers <= 0 || $maxScore <= 0) {
+			return 0.0;
+		}
+
+		$ratio = $correctAnswers / $totalQuestions;
+		$thresholds = $gradingConfig['thresholds'] ?? [
+			['score' => 3, 'minRatio' => 1.0],
+			['score' => 2, 'minRatio' => 0.67],
+			['score' => 1, 'minRatio' => 0.34],
+		];
+
+		usort($thresholds, static function (array $left, array $right): int {
+			return (int)($right['score'] ?? 0) <=> (int)($left['score'] ?? 0);
+		});
+
+		foreach ($thresholds as $threshold) {
+			$score = (int)($threshold['score'] ?? 0);
+			$minRatio = (float)($threshold['minRatio'] ?? 0);
+			if ($score > $maxScore) {
+				continue;
+			}
+
+			if ($ratio >= $minRatio) {
+				return (float)$score;
+			}
+		}
+
+		return 0.0;
 	}
 
 	private function isAnswerCorrect(array $answerConfig, string $userAnswer, array $row): bool

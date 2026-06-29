@@ -132,7 +132,7 @@ class ClassController
         }
 
         $stmt = $this->db->prepare(
-            "SELECT id, name, age, login, password, role FROM users
+            "SELECT id, name, age, login, role FROM users
              WHERE class_id = :cid AND role = 'student'
              ORDER BY name"
         );
@@ -149,7 +149,6 @@ class ClassController
                 'allTime'      => '',
                 'timeFirstLab' => '',
                 'login'        => $student['login'] ?? '',
-                'password'     => $student['password'] ?? '',
                 'name'         => $student['name'] ?? '',
                 'age'          => (int)($student['age'] ?? 0),
                 'avgMark'      => $avgMark,

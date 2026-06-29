@@ -19,20 +19,21 @@ class Application
     public function handleAction(array $request)
     {
         switch ($this->action) {
+            case 'login':
             case 'logging':
                 $authController = new AuthController();
-                $response = $authController->auth($request['login'], $request['password']);
+                $response = $authController->auth((string)($request['login'] ?? ''), (string)($request['password'] ?? ''));
                 break;
             case 'setAnswer':
                 $answerController = new AnswerController();
-                $response = $answerController->validateAnswers($_REQUEST);
+                $response = $answerController->validateAnswers($request);
                 break;
             case 'getUserStatistic':
-                $statisticController = new StatisticsController($_REQUEST['id']);
+                $statisticController = new StatisticsController((int)($request['id'] ?? 0));
                 $response = $statisticController->getUserStatistic();
                 break;
             case 'getProgress':
-                $progressController = new ProgressController($_REQUEST['id']);
+                $progressController = new ProgressController((string)($request['id'] ?? ''));
                 $response = $progressController->getStudentProgress();
                 break;
             case 'getClasses':

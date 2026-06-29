@@ -93,7 +93,6 @@ class AuthController
 				'students' => [
 					'id' => $user['id'],
 					'login' => $user['login'],
-					'password' => $user['password'],
 					'name' => $user['name'],
 					'age' => $user['age'],
 					'role' => $this->normalizeRole($user['role'] ?? null),

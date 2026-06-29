@@ -29,7 +29,21 @@ register_shutdown_function(static function () use ($logger, $request): void {
     }
 });
 
-parse_str($request, $requestArray);
+function parseRequestBody(string $request): array
+{
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
+    $isJsonRequest = stripos($contentType, 'application/json') !== false;
+
+    if ($isJsonRequest) {
+        $decoded = json_decode($request, true);
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    parse_str($request, $requestArray);
+    return is_array($requestArray) ? $requestArray : [];
+}
+
+$requestArray = parseRequestBody($request);
 $action = $requestArray['type'] ?? '';
 
 $application = new Application($action);

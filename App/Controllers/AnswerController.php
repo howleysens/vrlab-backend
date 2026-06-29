@@ -4,19 +4,21 @@ namespace App\Controllers;
 
 class AnswerController
 {
-    private $answers;
+    private array $answers = [];
+    private array $requestData = [];
 
     public function __construct()
     {
         $this->loadAnswers();
     }
 
-    private function loadAnswers()
+    private function loadAnswers(): void
     {
         $jsonPath = __DIR__ . '/../config/answers.json';
         if (file_exists($jsonPath)) {
             $jsonContent = file_get_contents($jsonPath);
-            $this->answers = json_decode($jsonContent, true);
+            $decoded = json_decode($jsonContent, true);
+            $this->answers = is_array($decoded) ? $decoded : [];
         }
     }
 
@@ -107,11 +109,11 @@ class AnswerController
                 return $userValue >= $answerConfig['min'] && $userValue <= $answerConfig['max'];
             
             case 'dependent':
-                if (!isset($_POST[$answerConfig['dependsOn']])) {
+                if (!isset($this->requestData[$answerConfig['dependsOn']])) {
                     return false;
                 }
-                
-                $dependentValue = $this->normalizeNumber($_POST[$answerConfig['dependsOn']]);
+
+                $dependentValue = $this->normalizeNumber($this->requestData[$answerConfig['dependsOn']]);
                 if ($dependentValue === null) {
                     return false;
                 }
@@ -145,18 +147,22 @@ class AnswerController
         }
     }
 
-    public function validateAnswers()
+    public function validateAnswers(array $requestData = []): array
     {
+        $this->requestData = $requestData;
+
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             return [
                 'error' => 'Method not allowed',
                 'correct' => 0,
                 'total' => 0,
+                'score' => 0,
+                'maxScore' => 3,
                 'percentage' => 0
             ];
         }
 
-        $labId = $_POST['lab_id'] ?? $_POST['labNumber'] ?? 1;
+        $labId = $requestData['lab_id'] ?? $requestData['labNumber'] ?? 1;
         $currentLab = $this->getCurrentLab($labId);
 
         if (!$currentLab) {
@@ -164,11 +170,13 @@ class AnswerController
                 'error' => 'Laboratory work not found',
                 'correct' => 0,
                 'total' => 0,
+                'score' => 0,
+                'maxScore' => 3,
                 'percentage' => 0
             ];
         }
 
-        $userAnswers = array_filter($_POST, function ($value, $key) {
+        $userAnswers = array_filter($requestData, function ($value, $key) {
             return strpos($key, 'Answer') === 0 && $value !== '';
         }, ARRAY_FILTER_USE_BOTH);
 
@@ -187,25 +195,34 @@ class AnswerController
 
         try {
             $this->createLabTable($tableName, $currentLab);
-            $this->saveStudentAnswers($tableName, $userAnswers, $currentLab);
+            $this->saveStudentAnswers($tableName, $userAnswers, $currentLab, $requestData);
         } catch (\Exception $e) {
             error_log("Error creating/saving lab data: " . $e->getMessage());
         }
 
+        $score = $this->calculateLabScore($correctCount, $totalAnswers, $currentLab);
+        $percentage = $totalAnswers > 0 ? round(($correctCount / $totalAnswers) * 100) : 0;
+
         return [
             'correct' => $correctCount,
             'total' => $totalAnswers,
-            'percentage' => $totalAnswers > 0 ? round(($correctCount / $totalAnswers) * 100) : 0];
+            'score' => $score,
+            'maxScore' => (int)(($currentLab['grading']['maxScore'] ?? 3)),
+            'percentage' => $percentage,
+        ];
     }
 
-    private function createLabTable($tableName, $currentLab)
+    private function createLabTable($tableName, $currentLab): void
     {
+        $db = null;
+
         try {
             $db = new \SQLite3('App/database/database.sqlite');
             $columns = [];
             foreach ($currentLab['answers'] as $answerKey => $answerConfig) {
                 $columns[] = "$answerKey TEXT";
             }
+
             $columnsStr = implode(', ', $columns);
             $query = "CREATE TABLE IF NOT EXISTS $tableName (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -213,21 +230,39 @@ class AnswerController
                 $columnsStr,
                 total_questions INTEGER,
                 correct_answers INTEGER,
+                score INTEGER DEFAULT 0,
                 percentage REAL,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )";
             $db->exec($query);
-            $db->close();
+
+            $tableInfo = $db->query("PRAGMA table_info($tableName)");
+            $hasScoreColumn = false;
+
+            while ($tableInfo !== false && ($column = $tableInfo->fetchArray(SQLITE3_ASSOC))) {
+                if (($column['name'] ?? '') === 'score') {
+                    $hasScoreColumn = true;
+                    break;
+                }
+            }
+
+            if (!$hasScoreColumn) {
+                $db->exec("ALTER TABLE $tableName ADD COLUMN score INTEGER DEFAULT 0");
+            }
         } catch (\Exception $e) {
             error_log("Error creating table $tableName: " . $e->getMessage());
             throw $e;
+        } finally {
+            if ($db instanceof \SQLite3) {
+                $db->close();
+            }
         }
     }
 
-    private function saveStudentAnswers($tableName, $userAnswers, $currentLab)
+    private function saveStudentAnswers($tableName, $userAnswers, $currentLab, array $requestData): void
     {
         $db = new \SQLite3('App/database/database.sqlite');
-        $studentId = $_POST['id'] ?? 'unknown';
+        $studentId = $requestData['id'] ?? 'unknown';
         $columns = [];
         $values = [];
         foreach ($currentLab['answers'] as $answerKey => $answerConfig) {
@@ -246,11 +281,46 @@ class AnswerController
                 $correctAnswers++;
             }
         }
+
+        $score = $this->calculateLabScore($correctAnswers, $totalQuestions, $currentLab);
         $percentage = $totalQuestions > 0 ? round(($correctAnswers / $totalQuestions) * 100, 2) : 0;
 
-        $query = "INSERT INTO $tableName (student_id, $columnsStr, total_questions, correct_answers, percentage) 
-                  VALUES ('$studentId', $valuesStr, $totalQuestions, $correctAnswers, $percentage)";
+        $query = "INSERT INTO $tableName (student_id, $columnsStr, total_questions, correct_answers, score, percentage)
+                  VALUES ('$studentId', $valuesStr, $totalQuestions, $correctAnswers, $score, $percentage)";
         $db->exec($query);
         $db->close();
+    }
+
+    private function calculateLabScore(int $correctAnswers, int $totalQuestions, array $currentLab): int
+    {
+        $maxScore = (int)($currentLab['grading']['maxScore'] ?? 3);
+        if ($totalQuestions <= 0 || $correctAnswers <= 0 || $maxScore <= 0) {
+            return 0;
+        }
+
+        $ratio = $correctAnswers / $totalQuestions;
+        $thresholds = $currentLab['grading']['thresholds'] ?? [
+            ['score' => 3, 'minRatio' => 1.0],
+            ['score' => 2, 'minRatio' => 0.67],
+            ['score' => 1, 'minRatio' => 0.34],
+        ];
+
+        usort($thresholds, static function (array $left, array $right): int {
+            return (int)($right['score'] ?? 0) <=> (int)($left['score'] ?? 0);
+        });
+
+        foreach ($thresholds as $threshold) {
+            $score = (int)($threshold['score'] ?? 0);
+            $minRatio = (float)($threshold['minRatio'] ?? 0);
+            if ($score > $maxScore) {
+                continue;
+            }
+
+            if ($ratio >= $minRatio) {
+                return $score;
+            }
+        }
+
+        return 0;
     }
 }

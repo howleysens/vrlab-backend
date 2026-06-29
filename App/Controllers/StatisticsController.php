@@ -37,7 +37,6 @@ class StatisticsController
 					'id' => $this->id,
 					'name' => $userData['name'],
 					'login' => $userData['login'],
-					'password' => $userData['password'],
 					'age' => $userData['age'],
 					'role' => in_array(($userData['role'] ?? null), ['student', 'teacher'], true) ? $userData['role'] : 'student',
 					'avgMark' => $overallAvg,
